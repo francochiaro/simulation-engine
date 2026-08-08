@@ -36,14 +36,27 @@ class ResourcePool:
     (smaller = first; FIFO within ties).
     """
 
-    def __init__(self, model: Model, name: str, capacity: int):
+    def __init__(
+        self,
+        model: Model,
+        name: str,
+        capacity: int,
+        *,
+        mtbf: Distribution | None = None,
+        mttr: Distribution | None = None,
+    ):
         if capacity < 1:
             raise ValueError(f"ResourcePool {name!r}: capacity must be >= 1")
+        if (mtbf is None) != (mttr is None):
+            raise ValueError(f"ResourcePool {name!r}: give both mtbf= and mttr=, or neither")
         self.m = model
         self.name = name
         self.capacity = capacity
+        self.mtbf = mtbf
+        self.mttr = mttr
         self.busy = LevelMonitor(f"{name}.busy")
         self.queue_len = LevelMonitor(f"{name}.queue")
+        self.down = LevelMonitor(f"{name}.down")
         self.wait = TallyMonitor(f"{name}.wait")
         self.unit_busy_time: dict[str, float] = {}
         model._register_pool(self)
@@ -55,15 +68,48 @@ class ResourcePool:
         self._seized_at: dict[str, float] = {}
         self.busy = LevelMonitor(f"{self.name}.busy")
         self.queue_len = LevelMonitor(f"{self.name}.queue")
+        self.down = LevelMonitor(f"{self.name}.down")
         self.wait = TallyMonitor(f"{self.name}.wait")
         self.unit_busy_time = {u: 0.0 for u in self._free_units}
+        if self.mtbf is not None:
+            for i in range(self.capacity):
+                self.m.env.process(self._downtime_proc(i))
 
     def utilization(self) -> float:
-        return self.busy.mean() / self.capacity
+        # Busy with real work — downtime is tracked separately and excluded.
+        down_mean = self.down.mean()
+        import math as _math
+
+        down = 0.0 if _math.isnan(down_mean) else down_mean
+        return (self.busy.mean() - down) / self.capacity
+
+    def _downtime_proc(self, i: int):
+        """Failures per unit-slot: after ~MTBF of clock time, take one unit
+        down for ~MTTR. Non-preemptive — an in-progress job finishes first
+        (preempt-resume is on the backlog)."""
+        env = self.m.env
+        rng = self.m.streams.stream(f"pool.{self.name}.downtime.{i}")
+        assert self.mtbf is not None and self.mttr is not None
+        while True:
+            yield env.timeout(self.mtbf.sample(rng))
+            req, unit = yield from self._acquire(priority=-1e12)
+            self.down.increment(+1, env.now)
+            self.m.trace.emit(
+                env.now, ev.STATE, resource=self.name, resource_unit=unit,
+                note="down",
+            )
+            yield env.timeout(self.mttr.sample(rng))
+            self.down.increment(-1, env.now)
+            self.m.trace.emit(
+                env.now, ev.STATE, resource=self.name, resource_unit=unit,
+                note="repaired",
+            )
+            self._free(req, unit)
 
     def reset_stats(self, t: float) -> None:
         self.busy.reset(t)
         self.queue_len.reset(t)
+        self.down.reset(t)
         self.wait.reset(t)
         self.unit_busy_time = {u: 0.0 for u in self.unit_busy_time}
         # Re-open busy intervals for units seized before the warmup boundary,
@@ -73,12 +119,13 @@ class ResourcePool:
     def finalize_stats(self, t: float) -> None:
         self.busy.finalize(t)
         self.queue_len.finalize(t)
+        self.down.finalize(t)
         for unit, t0 in self._seized_at.items():
             self.unit_busy_time[unit] = self.unit_busy_time.get(unit, 0.0) + (t - t0)
         self._seized_at = {u: t for u in self._seized_at}
 
     def stats(self) -> dict:
-        return {
+        out = {
             "busy": self.busy.summary(),
             "queue": self.queue_len.summary(),
             "wait": self.wait.summary(),
@@ -86,6 +133,14 @@ class ResourcePool:
             "capacity": self.capacity,
             "unit_busy_time": dict(self.unit_busy_time),
         }
+        if self.mtbf is not None:
+            import math as _math
+
+            down_mean = self.down.mean()
+            down = 0.0 if _math.isnan(down_mean) else down_mean
+            out["downtime"] = self.down.summary()
+            out["availability"] = 1.0 - down / self.capacity
+        return out
 
     def describe(self) -> dict:
         return {"name": self.name, "capacity": self.capacity}

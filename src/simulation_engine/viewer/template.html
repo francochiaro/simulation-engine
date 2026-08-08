@@ -259,7 +259,8 @@ function sizeCanvas() {
 }
 sizeCanvas();
 
-const GLYPH = { Source: "▸", Sink: "◎", Queue: "☰", Delay: "◷", Service: "⚙", Route: "⑂", Assign: "✎", Seize: "⊕", Release: "⊖" };
+const GLYPH = { Source: "▸", Sink: "◎", Queue: "☰", Delay: "◷", Service: "⚙", Route: "⑂", Assign: "✎", Seize: "⊕", Release: "⊖",
+  Batch: "▣", Unbatch: "▤", Gate: "⊫", Move: "➝", Ride: "↕", TimeMeasureStart: "⏱", TimeMeasureEnd: "⏱" };
 const center = (b) => ({ x: b.x + BW / 2, y: b.y + BH / 2 });
 
 function draw() {
@@ -286,13 +287,15 @@ function draw() {
     ctx.strokeStyle = cssVar("--border"); ctx.lineWidth = 1;
     roundRect(b.x, b.y, BW, BH, 10); ctx.fill(); ctx.stroke();
     ctx.fillStyle = cssVar("--ink-3"); ctx.font = "11px system-ui";
-    ctx.fillText(`${GLYPH[b.type] || "▢"} ${b.type}`, b.x + 8, b.y + 15);
+    let header = `${GLYPH[b.type] || "▢"} ${b.type}`;
+    if (b.type === "Queue")
+      header += ` · ${valAt(stepSeries[`queue:${b.name}`] || [[0, 0]], simT)}`;
+    ctx.fillText(header, b.x + 8, b.y + 15);
     ctx.fillStyle = cssVar("--ink-1"); ctx.font = "600 12.5px system-ui";
     ctx.fillText(truncate(b.name, 15), b.x + 8, b.y + 31);
     ctx.font = "11px system-ui"; ctx.fillStyle = cssVar("--ink-2");
     if (b.type === "Source") ctx.fillText(`out: ${valAt(stepSeries[`src:${b.name}`] || [[0, 0]], simT)}`, b.x + 8, b.y + 48);
     if (b.type === "Sink") ctx.fillText(`in: ${valAt(stepSeries[`sink:${b.name}`] || [[0, 0]], simT)}`, b.x + 8, b.y + 48);
-    if (b.type === "Queue") ctx.fillText(`waiting: ${valAt(stepSeries[`queue:${b.name}`] || [[0, 0]], simT)}`, b.x + 8, b.y + 48);
     if (b.type === "Service") {
       const busy = valAt(stepSeries[`pool:${b.params.resource}`] || [[0, 0]], simT);
       const cap = b.params.capacity;

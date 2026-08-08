@@ -7,16 +7,24 @@ methodology this toolkit implements.
 
 from .blocks import (
     Assign,
+    Batch,
     Block,
     Delay,
+    Fleet,
+    Gate,
+    Move,
     Queue,
     Release,
     ResourcePool,
+    Ride,
     Route,
     Seize,
     Service,
     Sink,
     Source,
+    TimeMeasureEnd,
+    TimeMeasureStart,
+    Unbatch,
 )
 from .distributions import (
     Choice,
@@ -40,8 +48,9 @@ from .units import TimeUnit
 __version__ = "0.1.0"
 
 __all__ = [
-    "Assign", "Block", "Delay", "Queue", "Release", "ResourcePool", "Route",
-    "Seize", "Service", "Sink", "Source",
+    "Assign", "Batch", "Block", "Delay", "Fleet", "Gate", "Move", "Queue",
+    "Release", "ResourcePool", "Ride", "Route", "Seize", "Service", "Sink",
+    "Source", "TimeMeasureEnd", "TimeMeasureStart", "Unbatch",
     "Choice", "Constant", "Distribution", "Empirical", "Erlang", "Exponential",
     "Gamma", "Lognormal", "Normal", "Pert", "RateSchedule", "Triangular",
     "Uniform", "Weibull",

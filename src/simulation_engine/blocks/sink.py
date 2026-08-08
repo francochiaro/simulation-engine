@@ -36,6 +36,19 @@ class Sink(Block):
                 f"units {held} — every Seize needs a matching Release "
                 f"(or use Service, which cannot leak)"
             )
+        # A batch container disposed here disposes its members with it.
+        member_events = getattr(entity, "_member_events", None)
+        if member_events is not None:
+            for member, evt in zip(entity.attrs.get("members", []), member_events):
+                member_tis = env.now - member.created_at
+                self.time_in_system.observe(member_tis)
+                self.count += 1
+                m.trace.emit(
+                    env.now, ev.DEPART, member, block=self.name,
+                    time_in_system=member_tis, via_batch=entity.id,
+                )
+                m._entity_left(env.now)
+                evt.succeed(None)
         m.trace.emit(env.now, ev.DEPART, entity, block=self.name, time_in_system=tis)
         m._entity_left(env.now)
         return None

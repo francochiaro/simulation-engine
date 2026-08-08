@@ -110,7 +110,9 @@ Design rules the codebase enforces:
 
 ```
 src/simulation_engine/
-  blocks/            the Tier-0 block DSL
+  blocks/            the block DSL — Tier 0 (Source/Queue/Delay/Service/…)
+                     + Tier 1 (Batch/Unbatch, Gate, Move, TimeMeasure,
+                     pool downtime, Fleet/Ride transporters)
   model.py           graph, validation, run loop, artifacts
   experiments.py     replications, sweeps, Monte Carlo, Welch
   theory_check.py    M/M/1 · M/M/c · M/G/1 · Kingman anchors + Little residual
@@ -118,7 +120,9 @@ src/simulation_engine/
   monitors.py        time-weighted & observation statistics
   viewer/            self-contained HTML replay viewer
 skill/               the /simulate Claude Code skill (conversational workflow)
-examples/            worked, theory-anchored examples
+examples/            mm1_queue (theory anchor) · warehouse (batching,
+                     breakdowns, forklifts, CRN sweep) · elevator (transporter
+                     fleet, morning peak, capacity decision)
 THEORY.md            the theoretical backbone (read it)
 BACKLOG.md           out-of-scope roadmap: ABM, System Dynamics, optimization…
 ```
