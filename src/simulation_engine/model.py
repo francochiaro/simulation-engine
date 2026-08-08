@@ -82,7 +82,7 @@ class RunResult:
             json.dump(self.model_json, f, indent=2)
         self.trace.to_jsonl(paths["trace"])
         with open(paths["kpis"], "w") as f:
-            json.dump(self.kpis, f, indent=2, default=_json_default)
+            json.dump(sanitize_json(self.kpis), f, indent=2, default=_json_default)
         return paths
 
 
@@ -90,6 +90,17 @@ def _json_default(o):
     if isinstance(o, float) and math.isnan(o):
         return None
     raise TypeError(f"not JSON serializable: {type(o)}")
+
+
+def sanitize_json(o):
+    """Replace non-finite floats with None so artifacts are strict JSON."""
+    if isinstance(o, float) and not math.isfinite(o):
+        return None
+    if isinstance(o, dict):
+        return {k: sanitize_json(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [sanitize_json(x) for x in o]
+    return o
 
 
 class Model:
@@ -240,6 +251,7 @@ class Model:
         self.entities_created += 1
         self._arrivals_stat += 1
         self.wip.increment(+1, t)
+        self.trace.emit(t, ev.STATE, wip=int(self.wip.value))
 
     def _entity_left(self, t: float, disposed: bool = True) -> None:
         if disposed:
@@ -247,6 +259,7 @@ class Model:
         else:
             self.entities_dropped += 1
         self.wip.increment(-1, t)
+        self.trace.emit(t, ev.STATE, wip=int(self.wip.value))
 
     def _drive(self, entity: Entity, block):
         env = self.env

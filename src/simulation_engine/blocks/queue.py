@@ -174,7 +174,8 @@ class Queue(Block):
                 waited = env.now - item.joined_at
                 self.wait.observe(waited)
                 m.trace.emit(
-                    env.now, ev.RENEGE, entity, block=self.name, waited=waited
+                    env.now, ev.RENEGE, entity, block=self.name, waited=waited,
+                    qlen=len(self._items),
                 )
                 self._fire("on_timeout", entity)
                 target = self.outputs["timeout"]
@@ -186,7 +187,10 @@ class Queue(Block):
 
         waited = env.now - item.joined_at
         self.wait.observe(waited)
-        m.trace.emit(env.now, ev.QUEUE_LEAVE, entity, block=self.name, waited=waited)
+        m.trace.emit(
+            env.now, ev.QUEUE_LEAVE, entity, block=self.name, waited=waited,
+            qlen=len(self._items),
+        )
         self._fire("on_exit", entity)
         return self.outputs["out"]
 
