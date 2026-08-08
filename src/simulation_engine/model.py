@@ -60,6 +60,10 @@ class RunResult:
                 elif isinstance(blob, (int, float)):
                     out[f"{name}.{stat_name}"] = float(blob)
         for name, stats in self.kpis["pools"].items():
+            for stat_name, blob in stats.items():
+                if isinstance(blob, dict) and "mean" in blob:
+                    if not math.isnan(blob["mean"]):
+                        out[f"{name}.{stat_name}.mean"] = blob["mean"]
             out[f"{name}.utilization"] = stats["utilization"]
         ent = self.kpis["entities"]
         out["entities.created"] = float(ent["created"])
