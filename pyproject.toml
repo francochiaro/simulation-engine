@@ -1,0 +1,25 @@
+[project]
+name = "simulation-engine"
+version = "0.1.0"
+description = "Agent-driven discrete-event and Monte Carlo simulation: a validated block DSL on SimPy, experiment machinery with confidence intervals, and a self-contained web replay viewer"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Franco Chiaro", email = "franco.chiaro94@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.1",
+    "pandas>=3.0.5",
+    "scipy>=1.18.0",
+    "simpy>=4.1.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.4,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
