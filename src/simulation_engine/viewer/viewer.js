@@ -1054,5 +1054,10 @@ seedMC();
 buildParamPanel();
 setBusy(false);
 requestAnimationFrame(tick);
-// Headless/E2E hook: http://…/?autorun=1 runs once with default factors.
-if (SIM.live && new URLSearchParams(location.search).has("autorun")) runOnce();
+// Headless/E2E hook: ?autorun=1 runs once with default factors;
+// ?autorun=<seed> also overrides the seed so the swap is observable.
+const autorun = new URLSearchParams(location.search).get("autorun");
+if (SIM.live && autorun != null) {
+  if (autorun !== "" && autorun !== "1") $("#seedInput").value = autorun;
+  runOnce();
+}
