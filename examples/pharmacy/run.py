@@ -150,7 +150,7 @@ def main() -> None:
     )
     print(f"\nviewer: {path}")
 
-    report_path = os.path.join(here, "report.md")
+    report_path = os.path.join(out_dir, "report.md")
     build_report(
         question="Should the pharmacy add a third counter to stop losing "
                  "lunch-hour customers?",

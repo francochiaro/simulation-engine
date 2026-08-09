@@ -124,7 +124,9 @@ src/simulation_engine/
 skill/               the /simulate Claude Code skill (conversational workflow)
 examples/            mm1_queue (theory anchor) · warehouse (batching,
                      breakdowns, forklifts, CRN sweep) · elevator (transporter
-                     fleet, morning peak, capacity decision)
+                     fleet, morning peak, capacity decision) · pharmacy (lunch
+                     rush, reneging, sequential sizing — born from a /simulate
+                     dogfood run)
 THEORY.md            the theoretical backbone (read it)
 BACKLOG.md           out-of-scope roadmap: ABM, System Dynamics, optimization…
 ```
