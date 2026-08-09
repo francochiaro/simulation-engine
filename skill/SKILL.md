@@ -62,10 +62,24 @@ approval before generating code.
 
 ### 3 — Build
 Write `model.py`: a `make_model(**factors)` factory (experimental factors as
-keyword args — that's what `sweep()` varies), `m.output(...)` for the
-response KPIs, `if __name__ == "__main__"` showcase block. Block positions
-`.at(x, y)` roughly following the physical layout. `m.run()` validates the
-graph automatically; fix anything it raises.
+keyword args — that's what `sweep()` varies *and* what the viewer's parameter
+panel edits), `m.output(...)` for the response KPIs, `if __name__ ==
+"__main__"` showcase block. Block positions `.at(x, y)` roughly following the
+physical layout. `m.run()` validates the graph automatically; fix anything it
+raises.
+
+**Expose every decision-relevant knob as a factor, including distributions**
+(e.g. `service_time=Exponential(mean=4)`) — a distribution-valued default
+renders in the viewer as a type dropdown + parameter fields; literals buried
+in the factory body stay uneditable. Add a module-level `FACTORS` dict for UI
+metadata (`label`, `min`, `max`, `step`, `options`, `help`):
+
+```python
+FACTORS = {
+    "n_counters": {"label": "counters", "min": 1, "max": 5, "step": 1},
+    "arrival_rate": {"label": "arrivals/min", "min": 0.1, "max": 2.0, "step": 0.1},
+}
+```
 
 ### 4 — Validation passes (before any production numbers)
 - **Showcase run**: short horizon, full trace → `build_viewer` → give the
@@ -92,12 +106,44 @@ recommended n and achieved precision; let the user trade precision vs runtime.
 Never rank on point estimates.
 
 ### 7 — Deliver
-`build_viewer(showcase_run, out_dir=..., experiment={kind, n_replications,
-kpi_table, theory_check, scenarios: {kpi, table, compare}, sequential})` →
-surface the path. Write `report.md`: question, conceptual model summary,
-validation evidence, results with CIs, sensitivity verdicts, assumptions +
-simplifications registers, and what would sharpen the answer (data to
-collect — §4.3 no-data strategy).
+Build the viewer with everything embedded — the experiment payload (raw
+per-replication samples feed the Monte Carlo tab's distribution histograms),
+the conceptual model (rendered in the Model tab), and the factor schema:
+
+```python
+from simulation_engine.factors import describe_factors
+from simulation_engine.report import build_report
+
+build_viewer(
+    showcase_run, out_dir=...,
+    experiment={"kind": "replications", **reps.as_payload(),
+                "theory_check": chk,                      # when it applies
+                "scenarios": {"kpi": kpi, "table": sw.table(kpi),
+                              "compare": sw.compare(kpi)}},
+    factors=describe_factors(make_model, FACTORS),
+    conceptual_model=open("simulations/<slug>/conceptual-model.md").read(),
+)
+```
+
+Generate the quantitative skeleton of `report.md` with `build_report(...)`
+(question, validation evidence, CI tables, P10/P50/P90, scenario verdicts,
+assumptions register — it owns every number so none get retyped wrong), then
+append the narrative: interpretation, recommendation, and what would sharpen
+the answer (data to collect — §4.3 no-data strategy).
+
+**Offer interactive exploration.** The static `index.html` is a read-only
+snapshot; to let the user change factors, re-run, and launch Monte Carlos
+from the browser, start the sidecar:
+
+```bash
+uv run --project ~/dev/simulation-engine python -m simulation_engine.serve \
+    simulations/<slug>/model.py [--until <horizon>]
+```
+
+It serves the viewer at `http://127.0.0.1:8000` with the parameter panel
+live (`POST /api/run` re-animates; `POST /api/replicate` fills the Monte
+Carlo tab). The `conceptual-model.md` sitting next to `model.py` is picked
+up automatically.
 
 ## Gotchas (hard-won)
 
@@ -118,6 +164,12 @@ collect — §4.3 no-data strategy).
   caveat).
 - Seeds: fixed seed = reproducible; vary `replication`, not `seed`, for
   independent replications (streams derive from both).
+- Callables/lambdas as block params are never editable in the viewer (they
+  serialize as `fn ⟨lambda⟩`) — prefer distributions and factors for anything
+  the user might want to change.
+- The sidecar (`simulation_engine.serve`) runs replications with
+  `n_workers=1` (spec-loaded modules don't pickle); models with no natural
+  end need `--until`.
 
 ## References
 
