@@ -38,6 +38,7 @@ from simulation_engine.report import build_report
 from simulation_engine.viewer.build_viewer import build_viewer
 
 DAY = 16 * 60.0  # two shifts, minutes
+HORIZON = DAY  # natural run length for the sidecar server
 
 FACTORS = {
     "n_pickers": {"label": "pickers", "min": 1, "max": 8, "step": 1},

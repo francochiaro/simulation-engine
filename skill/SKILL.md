@@ -81,6 +81,10 @@ FACTORS = {
 }
 ```
 
+Also declare `HORIZON = <natural run length>` (model time units) at module
+level — the sidecar server uses it as the default `until` for interactive
+runs, so models with never-stopping sources serve without extra flags.
+
 ### 4 — Validation passes (before any production numbers)
 - **Showcase run**: short horizon, full trace → `build_viewer` → give the
   user the `index.html` path: *"open this and watch — does the flow look like
@@ -169,7 +173,7 @@ up automatically.
   the user might want to change.
 - The sidecar (`simulation_engine.serve`) runs replications with
   `n_workers=1` (spec-loaded modules don't pickle); models with no natural
-  end need `--until`.
+  end need a module-level `HORIZON` or `--until`.
 
 ## References
 

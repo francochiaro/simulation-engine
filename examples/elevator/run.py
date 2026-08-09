@@ -31,6 +31,7 @@ from simulation_engine.viewer.build_viewer import build_viewer
 
 FLOORS = 20
 HOUR = 3600.0  # seconds
+HORIZON = 3 * HOUR  # natural run length for the sidecar server
 
 FACTORS = {
     "n_cars": {"label": "elevator cars", "min": 1, "max": 6, "step": 1},

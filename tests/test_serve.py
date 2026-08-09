@@ -117,6 +117,20 @@ def test_error_surfaces(server):
     assert status == 404
 
 
+def test_horizon_constant_supplies_until(tmp_path):
+    path = tmp_path / "model.py"
+    path.write_text(MODEL_PY + "\nHORIZON = 150.0\n")
+    httpd = make_server(str(path), port=0, seed=5)  # no until= passed
+    try:
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        status, raw = request(httpd.server_address[:2], "GET", "/api/factors")
+        assert status == 200
+        assert json.loads(raw)["defaults"]["until"] == 150.0
+    finally:
+        httpd.shutdown()
+
+
 def test_trace_cap_maps_to_413(server, monkeypatch):
     monkeypatch.setattr(serve_mod, "MAX_TRACE_EVENTS", 10)
     status, raw = request(server, "POST", "/api/run", {"factors": {}})

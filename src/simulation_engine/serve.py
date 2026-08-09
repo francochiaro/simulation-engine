@@ -5,8 +5,10 @@
 
 The target file must define ``make_model(**factors)`` (the same contract the
 /simulate skill and ``sweep()`` use) and may define a ``FACTORS`` metadata
-dict. The server runs one baseline showcase at the default factors, serves
-the viewer at ``/`` in live mode, and re-runs the engine on demand:
+dict and a ``HORIZON`` constant (the natural run length in model time units —
+used when ``--until`` is not given; models whose sources never stop need one
+or the other). The server runs one baseline showcase at the default factors,
+serves the viewer at ``/`` in live mode, and re-runs the engine on demand:
 
 - ``GET  /``              the viewer HTML (controls active)
 - ``GET  /api/factors``   factor schema + editable-distribution catalog
@@ -43,7 +45,7 @@ REPLICATION_CAP = 1000
 
 
 def load_model_module(path: str):
-    """Import the user's model.py; returns (make_model, FACTORS-or-None)."""
+    """Import the user's model.py; returns (make_model, FACTORS, HORIZON)."""
     path = os.path.abspath(path)
     spec = importlib.util.spec_from_file_location("_sim_user_model", path)
     if spec is None or spec.loader is None:
@@ -54,7 +56,10 @@ def load_model_module(path: str):
     factory = getattr(mod, "make_model", None)
     if not callable(factory):
         raise SystemExit(f"{path} must define make_model(**factors)")
-    return factory, getattr(mod, "FACTORS", None)
+    horizon = getattr(mod, "HORIZON", None)
+    if horizon is not None:
+        horizon = float(horizon)
+    return factory, getattr(mod, "FACTORS", None), horizon
 
 
 def find_conceptual_model(model_path: str) -> str | None:
@@ -216,10 +221,11 @@ def make_server(model_path: str, *, host="127.0.0.1", port=0, until=None,
                 warmup=0.0, seed=12345) -> ThreadingHTTPServer:
     """Build a ready-to-serve HTTP server (baseline already run). Split from
     main() so tests can start it on port 0 in a thread."""
-    factory, factors_meta = load_model_module(model_path)
+    factory, factors_meta, horizon = load_model_module(model_path)
     schema = describe_factors(factory, factors_meta)
     sim = SimServer(
-        factory, schema, until=until, warmup=warmup, seed=seed,
+        factory, schema, until=until if until is not None else horizon,
+        warmup=warmup, seed=seed,
         conceptual_model=find_conceptual_model(model_path),
     )
     try:
@@ -227,7 +233,8 @@ def make_server(model_path: str, *, host="127.0.0.1", port=0, until=None,
     except ModelValidationError as e:
         if "No run length" in str(e) and until is None:
             raise SystemExit(
-                f"{e}\nThis model has no natural end — pass --until <horizon>."
+                f"{e}\nThis model has no natural end — pass --until <horizon> "
+                f"or declare HORIZON = <horizon> in the model file."
             ) from e
         raise
     return ThreadingHTTPServer((host, port), make_handler(sim))

@@ -23,6 +23,7 @@ from simulation_engine.report import build_report
 from simulation_engine.viewer.build_viewer import build_viewer
 
 LAM, MU = 0.8, 1.0
+HORIZON = 480.0  # showcase horizon for the sidecar server (minutes)
 
 FACTORS = {
     "lam": {"label": "arrival rate λ (per min)", "min": 0.05, "max": 0.95, "step": 0.05},
