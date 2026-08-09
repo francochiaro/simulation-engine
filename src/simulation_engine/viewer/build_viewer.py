@@ -40,8 +40,14 @@ def _render(
     top-level SIM keys — ``conceptual_model`` (markdown string), ``factors``
     (schema list), and the sidecar server's ``live``/``dist_catalog``/
     ``defaults``. Absent keys stay absent: the JS null-guards everything."""
+    # The shipped file stays one self-contained HTML; only the *source* is
+    # split (shell / CSS / JS) so each partial keeps its editor tooling.
+    pkg = resources.files("simulation_engine.viewer")
     template = (
-        resources.files("simulation_engine.viewer").joinpath("template.html").read_text()
+        pkg.joinpath("template.html")
+        .read_text()
+        .replace("/*__CSS__*/", pkg.joinpath("viewer.css").read_text().rstrip("\n"))
+        .replace("/*__JS__*/", pkg.joinpath("viewer.js").read_text().rstrip("\n"))
     )
     if len(trace_records) > MAX_TRACE_EVENTS:
         raise ValueError(
@@ -87,6 +93,9 @@ def build_viewer(
     if conceptual_model is not None:
         with open(os.path.join(out_dir, "conceptual_model.md"), "w") as f:
             f.write(conceptual_model)
+    if factors is not None:
+        with open(os.path.join(out_dir, "factors.json"), "w") as f:
+            json.dump(sanitize_json(factors), f, default=_json_default)
     html = _render(
         run_result.model_json,
         run_result.trace.records,
@@ -122,8 +131,17 @@ def build_from_dir(run_dir: str) -> str:
     if os.path.exists(cm_path):
         with open(cm_path) as f:
             conceptual_model = f.read()
+    factors = None
+    factors_path = os.path.join(run_dir, "factors.json")
+    if os.path.exists(factors_path):
+        with open(factors_path) as f:
+            factors = json.load(f)
     html = _render(
-        model, records, kpis, experiment, extra={"conceptual_model": conceptual_model}
+        model,
+        records,
+        kpis,
+        experiment,
+        extra={"conceptual_model": conceptual_model, "factors": factors},
     )
     path = os.path.abspath(os.path.join(run_dir, "index.html"))
     with open(path, "w") as f:

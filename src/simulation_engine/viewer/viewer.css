@@ -1,0 +1,92 @@
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --page: #f9f9f7;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --good: #006300; --bad: #d03b3b;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --page: #0d0d0d;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+      --good: #0ca30c; --bad: #e66767;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --page: #0d0d0d;
+    --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --good: #0ca30c; --bad: #e66767;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page); color: var(--ink-1); padding: 20px 24px 60px;
+  }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  header h1 { font-size: 20px; font-weight: 650; }
+  header .meta { color: var(--ink-3); font-size: 12.5px; }
+  #themeBtn { margin-left: auto; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--ink-2); border-radius: 8px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 12.5px; }
+  nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--grid); margin-bottom: 16px; }
+  nav.tabs button {
+    font: inherit; font-weight: 550; color: var(--ink-3); background: none; border: none;
+    padding: 8px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  nav.tabs button.active { color: var(--ink-1); border-bottom-color: var(--s1); }
+  .panel { display: none; } .panel.active { display: block; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; margin-bottom: 16px;
+  }
+  /* Animation */
+  #controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  #controls button {
+    font: inherit; background: var(--surface-1); color: var(--ink-1);
+    border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; cursor: pointer;
+  }
+  #controls button:hover { border-color: var(--axis); }
+  #controls label { color: var(--ink-3); font-size: 12.5px; }
+  #controls input[type=range] { accent-color: var(--s1); }
+  #scrub { flex: 1 1 260px; }
+  #clock { font-variant-numeric: tabular-nums; color: var(--ink-2); min-width: 180px; }
+  #canvasWrap { overflow-x: auto; }
+  #anim { display: block; border-radius: 8px; }
+  /* Charts */
+  .chart-card h3 { font-size: 13.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 2px 0 6px; font-size: 12.5px; color: var(--ink-2); }
+  .legend .key { display: inline-block; width: 14px; height: 0; border-top: 2.5px solid; border-radius: 2px;
+    vertical-align: middle; margin-right: 5px; }
+  svg text { font: 11.5px system-ui, sans-serif; fill: var(--ink-3); }
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); min-width: 130px;
+  }
+  .tooltip .tt-t { color: var(--ink-3); margin-bottom: 4px; }
+  .tooltip .row { display: flex; align-items: center; gap: 6px; }
+  .tooltip .row .key { width: 12px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
+  .tooltip .row b { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .tooltip .row span { color: var(--ink-2); }
+  /* Report */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .tile .lbl { font-size: 12.5px; color: var(--ink-3); margin-bottom: 4px; }
+  .tile .val { font-size: 26px; font-weight: 600; }
+  .tile .sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; color: var(--ink-3); font-weight: 550; border-bottom: 1px solid var(--grid); padding: 6px 10px 6px 0; }
+  td { border-bottom: 1px solid var(--grid); padding: 6px 10px 6px 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--good); font-weight: 600; } .fail { color: var(--bad); font-weight: 600; }
+  h2.sec { font-size: 15px; font-weight: 650; margin: 22px 0 10px; }
+  .note { color: var(--ink-3); font-size: 12.5px; margin-top: 6px; }
