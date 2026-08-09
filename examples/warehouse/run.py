@@ -33,9 +33,15 @@ from simulation_engine import (
     Unbatch,
 )
 from simulation_engine.experiments import replicate, sweep
+from simulation_engine.factors import describe_factors
 from simulation_engine.viewer.build_viewer import build_viewer
 
 DAY = 16 * 60.0  # two shifts, minutes
+
+FACTORS = {
+    "n_pickers": {"label": "pickers", "min": 1, "max": 8, "step": 1},
+    "cart_size": {"label": "cart size (orders)", "min": 2, "max": 12, "step": 2},
+}
 
 
 def make_model(n_pickers: int = 3, cart_size: int = 4) -> Model:
@@ -135,17 +141,14 @@ def main() -> None:
         out_dir=out_dir,
         experiment={
             "kind": "replications + CRN sweep",
-            "n_replications": reps.n,
-            "kpi_table": {
-                k: v for k, v in reps.table().items()
-                if k.startswith(("orders_", "order_to_dock", "packers.", "clock_out"))
-            },
+            **reps.as_payload(),
             "scenarios": {
                 "kpi": kpi,
                 "table": sw.table(kpi),
                 "compare": sw.compare(kpi),
             },
         },
+        factors=describe_factors(make_model, FACTORS),
     )
     print(f"\nviewer: {path}")
 

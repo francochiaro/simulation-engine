@@ -121,6 +121,31 @@ class ReplicationsResult:
             out["halfwidth"].append(ci_halfwidth(xs[:i], self.confidence))
         return out
 
+    def percentiles(self, kpi: str) -> dict:
+        """P5/P10/P50/P90/P95 across replications — the decision-relevant
+        summary of an output *distribution* (THEORY.md §8.1), complementing
+        the CI on the mean."""
+        arr = np.asarray(self.kpi_samples[kpi], dtype=float)
+        arr = arr[~np.isnan(arr)]
+        if arr.size == 0:
+            return {f"p{q}": None for q in (5, 10, 50, 90, 95)}
+        vals = np.percentile(arr, [5, 10, 50, 90, 95])
+        return {f"p{q}": float(v) for q, v in zip((5, 10, 50, 90, 95), vals)}
+
+    def as_payload(self) -> dict:
+        """Everything the viewer's Monte Carlo tab needs, JSON-ready:
+        summaries, raw per-replication samples, and percentiles per KPI."""
+        payload = {
+            "n_replications": self.n,
+            "confidence": self.confidence,
+            "kpi_table": self.table(),
+            "kpi_samples": self.kpi_samples,
+            "percentiles": {k: self.percentiles(k) for k in sorted(self.kpi_samples)},
+        }
+        if self.sequential:
+            payload["sequential"] = self.sequential
+        return payload
+
 
 def _run_scalars(args) -> dict[str, float]:
     factory, params, run_kwargs, rep = args

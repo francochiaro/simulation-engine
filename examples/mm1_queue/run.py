@@ -18,9 +18,15 @@ import os
 from simulation_engine import Exponential, Model, Queue, Service, Sink, Source
 from simulation_engine import theory_check
 from simulation_engine.experiments import replicate
+from simulation_engine.factors import describe_factors
 from simulation_engine.viewer.build_viewer import build_viewer
 
 LAM, MU = 0.8, 1.0
+
+FACTORS = {
+    "lam": {"label": "arrival rate λ (per min)", "min": 0.05, "max": 0.95, "step": 0.05},
+    "mu": {"label": "service rate μ (per min)", "min": 0.5, "max": 2.0, "step": 0.05},
+}
 
 
 def make_model(lam: float = LAM, mu: float = MU) -> Model:
@@ -58,12 +64,8 @@ def main() -> None:
     path = build_viewer(
         showcase,
         out_dir=out_dir,
-        experiment={
-            "kind": "replications",
-            "n_replications": reps.n,
-            "kpi_table": reps.table(),
-            "theory_check": chk,
-        },
+        experiment={"kind": "replications", **reps.as_payload(), "theory_check": chk},
+        factors=describe_factors(make_model, FACTORS),
     )
     print(f"\nviewer: {path}")
 

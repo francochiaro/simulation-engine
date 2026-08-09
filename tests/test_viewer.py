@@ -47,3 +47,46 @@ def test_trace_size_guard(tmp_path, monkeypatch):
     monkeypatch.setattr(bv, "MAX_TRACE_EVENTS", 10)
     with pytest.raises(ValueError, match="animate a shorter run"):
         bv.build_viewer(res, out_dir=str(tmp_path))
+
+
+def test_experiment_payload_and_extras_embed_and_roundtrip(tmp_path):
+    from simulation_engine.experiments import replicate
+    from simulation_engine.factors import describe_factors
+
+    def factory():
+        m = Model("tiny", time_unit="minutes")
+        src = Source(m, "src", rate=1.0, max_arrivals=20)
+        svc = Service(m, "svc", duration=Exponential(mean=0.8), resource=1)
+        snk = Sink(m, "done")
+        src >> svc
+        svc >> snk
+        return m
+
+    reps = replicate(factory, n=3, until=100, seed=2, keep_showcase=True)
+    assert reps.showcase is not None
+    payload = reps.as_payload()
+    assert payload["n_replications"] == 3
+    assert len(payload["kpi_samples"]["done.count"]) == 3
+    assert set(payload["percentiles"]["done.count"]) == {"p5", "p10", "p50", "p90", "p95"}
+
+    schema = describe_factors(factory)
+    path = bv.build_viewer(
+        reps.showcase,
+        out_dir=str(tmp_path),
+        experiment={"kind": "replications", **payload},
+        conceptual_model="# Conceptual model\n\nA tiny queue.",
+        factors=schema,
+    )
+    html = open(path).read()
+    assert '"kpi_samples":' in html
+    assert '"conceptual_model":' in html
+    assert '"factors":' in html
+    # experiment.json now round-trips through build_from_dir, and the
+    # conceptual model survives via conceptual_model.md.
+    exp = json.load(open(tmp_path / "experiment.json"))
+    assert exp["n_replications"] == 3
+    assert (tmp_path / "conceptual_model.md").exists()
+    (tmp_path / "index.html").unlink()
+    rebuilt = open(bv.build_from_dir(str(tmp_path))).read()
+    assert '"kpi_samples":' in rebuilt
+    assert '"conceptual_model":' in rebuilt

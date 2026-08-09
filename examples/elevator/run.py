@@ -25,10 +25,15 @@ from simulation_engine import (
     Source,
 )
 from simulation_engine.experiments import replicate, sweep
+from simulation_engine.factors import describe_factors
 from simulation_engine.viewer.build_viewer import build_viewer
 
 FLOORS = 20
 HOUR = 3600.0  # seconds
+
+FACTORS = {
+    "n_cars": {"label": "elevator cars", "min": 1, "max": 6, "step": 1},
+}
 
 
 def make_model(n_cars: int = 2) -> Model:
@@ -122,17 +127,14 @@ def main() -> None:
         out_dir=out_dir,
         experiment={
             "kind": "replications + car-count sweep",
-            "n_replications": reps.n,
-            "kpi_table": {
-                k: v for k, v in reps.table().items()
-                if k.startswith(("riders_", "wait_", "door_", "cars."))
-            },
+            **reps.as_payload(),
             "scenarios": {
                 "kpi": kpi,
                 "table": sw.table(kpi),
                 "compare": sw.compare(kpi),
             },
         },
+        factors=describe_factors(make_model, FACTORS),
     )
     print(f"\nviewer: {path}")
 
