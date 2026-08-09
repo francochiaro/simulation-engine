@@ -31,6 +31,12 @@ class Distribution(ABC):
     @abstractmethod
     def mean(self) -> float: ...
 
+    @abstractmethod
+    def _ctor_args(self) -> dict:
+        """Constructor kwargs, JSON-safe, in the distribution's canonical
+        parameterization — ``type(self)(**self._ctor_args())`` must rebuild an
+        equivalent instance."""
+
     def variance(self) -> float:
         raise NotImplementedError(f"{type(self).__name__} has no closed-form variance")
 
@@ -42,12 +48,14 @@ class Distribution(ABC):
             raise ValueError("cv undefined for zero mean")
         return math.sqrt(self.variance()) / m
 
+    def to_dict(self) -> dict:
+        """Machine round-trip form: ``{"type": ..., "args": {...}}``.
+        Inverse is :func:`from_dict`."""
+        return {"type": type(self).__name__, "args": self._ctor_args()}
+
     def describe(self) -> dict:
-        d: dict[str, object] = {"type": type(self).__name__}
-        d.update(
-            {k: v for k, v in vars(self).items() if isinstance(v, (int, float, str))}
-        )
-        return d
+        """Flat human/audit form used in model.json: ``{"type": ..., <args>}``."""
+        return {"type": type(self).__name__, **self._ctor_args()}
 
 
 def _require(cond: bool, msg: str) -> None:
@@ -73,6 +81,9 @@ class Constant(Distribution):
     def variance(self) -> float:
         return 0.0
 
+    def _ctor_args(self) -> dict:
+        return {"value": self.value}
+
 
 class Uniform(Distribution):
     def __init__(self, low: float, high: float):
@@ -87,6 +98,9 @@ class Uniform(Distribution):
 
     def variance(self) -> float:
         return (self.high - self.low) ** 2 / 12
+
+    def _ctor_args(self) -> dict:
+        return {"low": self.low, "high": self.high}
 
 
 class Exponential(Distribution):
@@ -120,6 +134,10 @@ class Exponential(Distribution):
     def variance(self) -> float:
         return self._mean**2
 
+    def _ctor_args(self) -> dict:
+        # Canonical form is mean= even when constructed with rate=.
+        return {"mean": self._mean}
+
 
 class Triangular(Distribution):
     """Triangular(min, mode, max) — the data-poverty fallback when an SME can
@@ -143,6 +161,9 @@ class Triangular(Distribution):
     def variance(self) -> float:
         a, m, b = self.low, self.mode, self.high
         return (a**2 + m**2 + b**2 - a * m - a * b - m * b) / 18
+
+    def _ctor_args(self) -> dict:
+        return {"low": self.low, "mode": self.mode, "high": self.high}
 
 
 class Normal(Distribution):
@@ -174,6 +195,9 @@ class Normal(Distribution):
     def variance(self) -> float:
         return self.sd**2
 
+    def _ctor_args(self) -> dict:
+        return {"mean": self._mean, "sd": self.sd}
+
 
 class Lognormal(Distribution):
     """Lognormal parameterized by the mean and sd of X itself (NOT of ln X —
@@ -197,6 +221,9 @@ class Lognormal(Distribution):
     def variance(self) -> float:
         return self.sd**2
 
+    def _ctor_args(self) -> dict:
+        return {"mean": self._mean, "sd": self.sd}
+
 
 class Gamma(Distribution):
     def __init__(self, shape: float, scale: float):
@@ -213,6 +240,9 @@ class Gamma(Distribution):
     def variance(self) -> float:
         return self.shape * self.scale**2
 
+    def _ctor_args(self) -> dict:
+        return {"shape": self.shape, "scale": self.scale}
+
 
 class Erlang(Gamma):
     """Erlang-k: sum of k exponentials. cv = 1/sqrt(k) — the standard way to
@@ -223,6 +253,12 @@ class Erlang(Gamma):
         _require(mean > 0, f"Erlang mean must be > 0, got {mean}")
         super().__init__(shape=int(k), scale=mean / int(k))
         self.k = int(k)
+        self._mean = float(mean)
+
+    def _ctor_args(self) -> dict:
+        # The ctor takes (k, mean), not Gamma's (shape, scale); keep the
+        # original mean so the round trip reproduces scale bit-for-bit.
+        return {"k": self.k, "mean": self._mean}
 
 
 class Weibull(Distribution):
@@ -244,6 +280,9 @@ class Weibull(Distribution):
         g1 = math.gamma(1 + 1 / self.shape)
         g2 = math.gamma(1 + 2 / self.shape)
         return self.scale**2 * (g2 - g1**2)
+
+    def _ctor_args(self) -> dict:
+        return {"shape": self.shape, "scale": self.scale}
 
 
 class Pert(Distribution):
@@ -277,6 +316,9 @@ class Pert(Distribution):
         beta_var = a * b / ((a + b) ** 2 * (a + b + 1))
         return (self.high - self.low) ** 2 * beta_var
 
+    def _ctor_args(self) -> dict:
+        return {"low": self.low, "mode": self.mode, "high": self.high, "lam": self.lam}
+
 
 class Empirical(Distribution):
     """Resample observed data (with replacement). Cannot extrapolate beyond
@@ -295,6 +337,11 @@ class Empirical(Distribution):
 
     def variance(self) -> float:
         return float(self.data.var(ddof=1)) if len(self.data) > 1 else 0.0
+
+    def _ctor_args(self) -> dict:
+        # Full data retention — the only faithful round trip; SME datasets
+        # are small. describe() below keeps model.json to a summary.
+        return {"data": self.data.tolist()}
 
     def describe(self) -> dict:
         return {"type": "Empirical", "n": int(len(self.data)), "mean": self.mean()}
@@ -327,12 +374,10 @@ class Choice(Distribution):
         m = self.mean()
         return float((self.probs * (self.values - m) ** 2).sum())
 
-    def describe(self) -> dict:
-        return {
-            "type": "Choice",
-            "values": self.values.tolist(),
-            "probs": self.probs.tolist(),
-        }
+    def _ctor_args(self) -> dict:
+        # Normalized probs re-normalize to themselves, so the round trip is
+        # stable even though the ctor accepts unnormalized weights.
+        return {"values": self.values.tolist(), "weights": self.probs.tolist()}
 
 
 class RateSchedule:
@@ -370,9 +415,56 @@ class RateSchedule:
             if rng.uniform() <= self.rate_at(t) / self.rate_max:
                 return t
 
-    def describe(self) -> dict:
+    def _ctor_args(self) -> dict:
         return {
-            "type": "RateSchedule",
-            "breakpoints": self.breakpoints,
+            "breakpoints": [[t, r] for t, r in self.breakpoints],
             "cycle": self.cycle,
         }
+
+    def to_dict(self) -> dict:
+        return {"type": "RateSchedule", "args": self._ctor_args()}
+
+    def describe(self) -> dict:
+        return {"type": "RateSchedule", **self._ctor_args()}
+
+
+_REGISTRY: dict[str, type] = {
+    cls.__name__: cls
+    for cls in (
+        Constant,
+        Uniform,
+        Exponential,
+        Triangular,
+        Normal,
+        Lognormal,
+        Gamma,
+        Erlang,
+        Weibull,
+        Pert,
+        Empirical,
+        Choice,
+        RateSchedule,
+    )
+}
+
+
+def from_dict(spec: dict) -> Distribution | RateSchedule:
+    """Inverse of ``to_dict()``. Also accepts the flat ``describe()`` shape
+    (``{"type": ..., <args>}``) so UI payloads can stay unnested.
+
+    Raises ``ValueError`` on an unknown type or bad args — constructor
+    validation messages propagate, so callers can surface them verbatim.
+    """
+    if not isinstance(spec, dict) or "type" not in spec:
+        raise ValueError(f"distribution spec must be a dict with a 'type' key, got {spec!r}")
+    kind = spec["type"]
+    cls = _REGISTRY.get(kind)
+    if cls is None:
+        raise ValueError(f"unknown distribution type {kind!r}; known: {sorted(_REGISTRY)}")
+    args = spec["args"] if "args" in spec else {k: v for k, v in spec.items() if k != "type"}
+    if not isinstance(args, dict):
+        raise ValueError(f"distribution args must be a dict, got {args!r}")
+    try:
+        return cls(**args)
+    except TypeError as e:
+        raise ValueError(f"bad args for {kind}: {e}") from e

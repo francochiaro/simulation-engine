@@ -41,6 +41,7 @@ from .distributions import (
     Triangular,
     Uniform,
     Weibull,
+    from_dict,
 )
 from .model import Model, ModelValidationError, RunResult
 from .units import TimeUnit
@@ -53,6 +54,6 @@ __all__ = [
     "Source", "TimeMeasureEnd", "TimeMeasureStart", "Unbatch",
     "Choice", "Constant", "Distribution", "Empirical", "Erlang", "Exponential",
     "Gamma", "Lognormal", "Normal", "Pert", "RateSchedule", "Triangular",
-    "Uniform", "Weibull",
+    "Uniform", "Weibull", "from_dict",
     "Model", "ModelValidationError", "RunResult", "TimeUnit",
 ]
