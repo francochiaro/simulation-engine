@@ -143,7 +143,12 @@ class ResourcePool:
         return out
 
     def describe(self) -> dict:
-        return {"name": self.name, "capacity": self.capacity}
+        d: dict = {"name": self.name, "capacity": self.capacity}
+        if self.mtbf is not None:
+            d["mtbf"] = self.mtbf.describe()
+        if self.mttr is not None:
+            d["mttr"] = self.mttr.describe()
+        return d
 
     # -- acquisition protocol (used by Service / Seize) --------------------
 

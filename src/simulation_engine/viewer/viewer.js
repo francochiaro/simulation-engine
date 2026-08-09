@@ -357,14 +357,14 @@ function tile(lbl, val, sub) {
   if (sub) t.appendChild(el("div", { class: "sub" }, sub));
   return t;
 }
-function tableOf(headers, rows) {
+function tableOf(headers, rows, numeric = true) {
   const tb = el("table"); const tr = el("tr");
-  headers.forEach((h, i) => tr.appendChild(el("th", { class: i > 0 ? "num" : "" }, h)));
+  headers.forEach((h, i) => tr.appendChild(el("th", { class: numeric && i > 0 ? "num" : "" }, h)));
   tb.appendChild(tr);
   for (const r of rows) {
     const row = el("tr");
     r.forEach((c, i) => {
-      const td = el("td", { class: i > 0 ? "num" : "" });
+      const td = el("td", { class: numeric && i > 0 ? "num" : "" });
       if (c instanceof Node) td.appendChild(c); else td.textContent = c;
       row.appendChild(td);
     });
@@ -427,8 +427,10 @@ function renderReport() {
 
   if (Object.keys(kpis.pools).length) {
     root.appendChild(el("h2", { class: "sec" }, "Resource pools"));
+    // Fleets have no queue stat — every blob is optional here.
     const prow = Object.entries(kpis.pools).map(([name, p]) => [
-      name, `${fmt(p.utilization * 100, 1)}%`, fmt(p.busy.mean), fmt(p.queue.mean), fmt(p.wait.mean), String(p.capacity),
+      name, `${fmt(p.utilization * 100, 1)}%`, fmt(p.busy && p.busy.mean),
+      fmt(p.queue && p.queue.mean), fmt(p.wait && p.wait.mean), String(p.capacity),
     ]);
     const pcard = el("div", { class: "card" });
     pcard.appendChild(tableOf(["pool", "utilization", "avg busy", "avg queue", "avg wait", "capacity"], prow));
@@ -487,6 +489,188 @@ function renderExperiment(root, ex) {
   }
 }
 
+// ---------- model tab ----------
+// Minimal hand-rolled markdown: the conceptual model is local, trusted-ish
+// content, but everything is HTML-escaped before any markup is applied.
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function mdInline(s) {
+  return s
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/\*([^*]+)\*/g, "<i>$1</i>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
+}
+function mdToHtml(md) {
+  md = escapeHtml(md.replace(/\r\n/g, "\n"));
+  md = md.replace(/&lt;!--[\s\S]*?--&gt;/g, ""); // comments (escaped form)
+  const out = [];
+  let inCode = false, listTag = null, para = [], tableRows = null;
+  const flushPara = () => { if (para.length) { out.push("<p>" + mdInline(para.join(" ")) + "</p>"); para = []; } };
+  const flushList = () => { if (listTag) { out.push("</" + listTag + ">"); listTag = null; } };
+  const flushTable = () => {
+    if (!tableRows) return;
+    let html = "<table>";
+    tableRows.forEach((cells, i) => {
+      const tag = i === 0 ? "th" : "td";
+      html += "<tr>" + cells.map((c) => `<${tag}>${mdInline(c)}</${tag}>`).join("") + "</tr>";
+    });
+    out.push(html + "</table>");
+    tableRows = null;
+  };
+  for (const raw of md.split("\n")) {
+    if (raw.trim().startsWith("```")) {
+      flushPara(); flushList(); flushTable();
+      out.push(inCode ? "</code></pre>" : "<pre><code>");
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) { out.push(raw); continue; }
+    const t = raw.trim();
+    if (t.startsWith("|") && t.endsWith("|") && t.length > 1) {
+      flushPara(); flushList();
+      if (/^[\s:\-|]+$/.test(t)) continue; // header separator row
+      (tableRows || (tableRows = [])).push(t.slice(1, -1).split("|").map((c) => c.trim()));
+      continue;
+    }
+    flushTable();
+    const h = t.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flushPara(); flushList(); out.push(`<h${h[1].length}>${mdInline(h[2])}</h${h[1].length}>`); continue; }
+    if (/^(-{3,}|\*{3,})$/.test(t)) { flushPara(); flushList(); out.push("<hr>"); continue; }
+    const li = t.match(/^[-*]\s+(.*)$/) || t.match(/^\d+[.)]\s+(.*)$/);
+    if (li) {
+      flushPara();
+      const want = /^\d/.test(t) ? "ol" : "ul";
+      if (listTag !== want) { flushList(); out.push("<" + want + ">"); listTag = want; }
+      out.push("<li>" + mdInline(li[1]) + "</li>");
+      continue;
+    }
+    if (t === "") { flushPara(); flushList(); continue; }
+    para.push(t);
+  }
+  flushPara(); flushList(); flushTable();
+  if (inCode) out.push("</code></pre>");
+  return out.join("\n");
+}
+
+// Human-readable distribution form. Accepts both the flat describe() shape
+// ({type, mean, sd}), the nested to_dict shape ({type, args:{...}}), and the
+// legacy leaked-underscore keys from pre-serialization model.json files.
+function prettyDist(d) {
+  if (d == null || typeof d !== "object") return typeof d === "number" ? fmt(d, 3) : String(d);
+  const a = d.args || d;
+  const n = (v) => fmt(v, 3);
+  switch (d.type) {
+    case "Constant": return n(a.value);
+    case "Uniform": return `Uniform(${n(a.low)}, ${n(a.high)})`;
+    case "Exponential": return `Exponential(mean=${n(a.mean ?? a._mean)})`;
+    case "Triangular": return `Triangular(${n(a.low)}, ${n(a.mode)}, ${n(a.high)})`;
+    case "Normal": return `Normal(mean=${n(a.mean ?? a._mean)}, sd=${n(a.sd)})`;
+    case "Lognormal": return `Lognormal(mean=${n(a.mean ?? a._mean)}, sd=${n(a.sd)})`;
+    case "Gamma": return `Gamma(shape=${n(a.shape)}, scale=${n(a.scale)})`;
+    case "Erlang": return `Erlang(k=${a.k}, mean=${n(a.mean ?? a.shape * a.scale)})`;
+    case "Weibull": return `Weibull(shape=${n(a.shape)}, scale=${n(a.scale)})`;
+    case "Pert":
+      return `Pert(${n(a.low)}, ${n(a.mode)}, ${n(a.high)}${a.lam != null && a.lam !== 4 ? `, λ=${n(a.lam)}` : ""})`;
+    case "Empirical": {
+      const count = a.n ?? (a.data ? a.data.length : null);
+      const mean = a.mean ?? (a.data ? a.data.reduce((s, x) => s + x, 0) / a.data.length : null);
+      return `Empirical(n=${count}, mean≈${n(mean)})`;
+    }
+    case "Choice": {
+      const probs = a.probs || a.weights || [];
+      return "Choice(" + (a.values || []).map((v, i) => `${n(v)}: ${fmt((probs[i] ?? 0) * 100, 0)}%`).join(", ") + ")";
+    }
+    case "RateSchedule": {
+      const bps = (a.breakpoints || []).map(([t, r]) => `${fmt(t, 0)}→${fmt(r, 3)}`).join(", ");
+      return `rate schedule: ${bps}` + (a.cycle ? ` (cycles every ${fmt(a.cycle, 0)})` : "");
+    }
+    case "expression": return `fn ⟨${a.name || "?"}⟩`;
+    default: {
+      const parts = Object.entries(a)
+        .filter(([k]) => k !== "type" && !k.startsWith("_"))
+        .map(([k, v]) => `${k}=${typeof v === "number" ? n(v) : JSON.stringify(v)}`);
+      return `${d.type || "?"}(${parts.join(", ")})`;
+    }
+  }
+}
+function prettyParams(params) {
+  const parts = [];
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v == null) continue;
+    if (Array.isArray(v)) parts.push(`${k}: [${v.map((x) => (typeof x === "number" ? fmt(x, 3) : x)).join(", ")}]`);
+    else if (typeof v === "object") parts.push(`${k}: ${prettyDist(v)}`);
+    else if (typeof v === "number") parts.push(`${k}: ${fmt(v, 3)}`);
+    else parts.push(`${k}: ${v}`);
+  }
+  return parts.join(" · ");
+}
+
+function renderModel() {
+  const doc = $("#doc");
+  if (SIM.conceptual_model) { doc.innerHTML = mdToHtml(SIM.conceptual_model); doc.hidden = false; }
+  else doc.hidden = true;
+
+  const root = $("#datadef");
+  root.textContent = "";
+
+  if (SIM.factors && SIM.factors.length) {
+    root.appendChild(el("h2", { class: "sec" }, "Experimental factors"));
+    const rows = SIM.factors.map((f) => [
+      f.label || f.name,
+      f.kind,
+      f.kind === "distribution" || f.kind === "schedule" ? prettyDist(f.default) : String(f.default),
+      f.options ? f.options.join(", ")
+        : (f.min != null || f.max != null)
+          ? `${f.min ?? "…"} – ${f.max ?? "…"}${f.step ? ` (step ${f.step})` : ""}` : "–",
+    ]);
+    const c = el("div", { class: "card" });
+    c.appendChild(tableOf(["factor", "kind", "default", "range / options"], rows, false));
+    c.appendChild(el("div", { class: "note" },
+      "Factors are the model's declared knobs — the keyword arguments of make_model(). Everything below is fixed in the model definition."));
+    root.appendChild(c);
+  }
+
+  root.appendChild(el("h2", { class: "sec" }, "Blocks"));
+  const bc = el("div", { class: "card" });
+  bc.appendChild(tableOf(
+    ["block", "type", "parameters"],
+    model.blocks.map((b) => [b.name, b.type, prettyParams(b.params) || "–"]),
+    false,
+  ));
+  root.appendChild(bc);
+
+  const frows = [];
+  for (const b of model.blocks)
+    for (const [port, tgt] of Object.entries(b.outputs || {}))
+      if (tgt) frows.push([b.name, port, tgt]);
+  if (frows.length) {
+    root.appendChild(el("h2", { class: "sec" }, "Flow"));
+    const fc = el("div", { class: "card" });
+    fc.appendChild(tableOf(["from", "port", "to"], frows, false));
+    root.appendChild(fc);
+  }
+
+  if (model.pools && model.pools.length) {
+    root.appendChild(el("h2", { class: "sec" }, "Resource pools"));
+    const pc = el("div", { class: "card" });
+    pc.appendChild(tableOf(
+      ["pool", "capacity", "details"],
+      model.pools.map((p) => [
+        p.name,
+        String(p.capacity),
+        Object.entries(p)
+          .filter(([k, v]) => !["name", "capacity"].includes(k) && v != null)
+          .map(([k, v]) => `${k}: ${typeof v === "object" ? prettyDist(v) : typeof v === "number" ? fmt(v, 3) : v}`)
+          .join(" · ") || "–",
+      ]),
+      false,
+    ));
+    root.appendChild(pc);
+  }
+}
+
 // ---------- boot / reinit ----------
 // reinit() swaps in a whole run ({model, trace, kpis}) — used at boot with
 // the embedded SIM and by the live parameter panel after POST /api/run.
@@ -501,6 +685,7 @@ function reinit(payload) {
   simT = 0;
   draw();
   renderReport();
+  renderModel();
   if ($("#panel-charts").classList.contains("active")) drawCharts();
 }
 reinit(SIM);

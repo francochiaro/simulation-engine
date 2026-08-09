@@ -90,3 +90,19 @@
   .ok { color: var(--good); font-weight: 600; } .fail { color: var(--bad); font-weight: 600; }
   h2.sec { font-size: 15px; font-weight: 650; margin: 22px 0 10px; }
   .note { color: var(--ink-3); font-size: 12.5px; margin-top: 6px; }
+  /* Model tab — rendered conceptual-model markdown */
+  .md { max-width: 900px; }
+  .md h1 { font-size: 18px; font-weight: 650; margin: 4px 0 10px; }
+  .md h2 { font-size: 15px; font-weight: 650; margin: 18px 0 8px; }
+  .md h3 { font-size: 13.5px; font-weight: 600; color: var(--ink-2); margin: 14px 0 6px; }
+  .md p { margin: 8px 0; }
+  .md ul, .md ol { margin: 8px 0 8px 22px; }
+  .md li { margin: 3px 0; }
+  .md table { margin: 10px 0; }
+  .md code { background: var(--page); border: 1px solid var(--border); border-radius: 5px;
+    padding: 1px 5px; font-size: 12px; }
+  .md pre { background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; overflow-x: auto; margin: 10px 0; }
+  .md pre code { background: none; border: none; padding: 0; }
+  .md hr { border: none; border-top: 1px solid var(--grid); margin: 16px 0; }
+  .md a { color: var(--s1); }

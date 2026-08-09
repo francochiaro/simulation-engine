@@ -97,6 +97,9 @@ class Fleet:
             "capacity": self.n_cars,
             "kind": "fleet",
             "speed": self.speed,
+            "load_time": self.load_time,
+            "unload_time": self.unload_time,
+            "home": self.home,
         }
 
 

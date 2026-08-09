@@ -66,6 +66,9 @@ def main() -> None:
         out_dir=out_dir,
         experiment={"kind": "replications", **reps.as_payload(), "theory_check": chk},
         factors=describe_factors(make_model, FACTORS),
+        conceptual_model=open(
+            os.path.join(os.path.dirname(__file__), "conceptual-model.md")
+        ).read(),
     )
     print(f"\nviewer: {path}")
 

@@ -16,7 +16,9 @@
 </header>
 <nav class="tabs">
   <button data-tab="anim" class="active">Animation</button>
+  <button data-tab="model">Model</button>
   <button data-tab="charts">Charts</button>
+  <button data-tab="mc" id="mcTabBtn" hidden>Monte Carlo</button>
   <button data-tab="report">Report</button>
 </nav>
 
@@ -32,7 +34,12 @@
   <div class="card" id="canvasWrap"><canvas id="anim"></canvas></div>
 </div>
 
+<div class="panel" id="panel-model">
+  <div class="card md" id="doc" hidden></div>
+  <div id="datadef"></div>
+</div>
 <div class="panel" id="panel-charts"><div id="charts"></div></div>
+<div class="panel" id="panel-mc"><div id="mc"></div></div>
 <div class="panel" id="panel-report"><div id="report"></div></div>
 <div class="tooltip" id="tooltip"></div>
 
