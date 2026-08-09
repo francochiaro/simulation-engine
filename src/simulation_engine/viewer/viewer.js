@@ -840,6 +840,198 @@ function renderModel() {
   }
 }
 
+// ---------- parameters & live mode ----------
+// Editable distribution types and their ordered args (mirrors
+// factors.distribution_catalog on the Python side).
+const DIST_PARAMS = {
+  Constant: ["value"], Uniform: ["low", "high"], Exponential: ["mean"],
+  Triangular: ["low", "mode", "high"], Normal: ["mean", "sd"], Lognormal: ["mean", "sd"],
+  Gamma: ["shape", "scale"], Erlang: ["k", "mean"], Weibull: ["shape", "scale"],
+  Pert: ["low", "mode", "high", "lam"],
+};
+// Normalize a distribution spec ({type, args} or flat, incl. legacy _mean).
+function distArgsOf(spec) {
+  const a = (spec && (spec.args || spec)) || {};
+  const out = {};
+  for (const k of DIST_PARAMS[spec && spec.type] || [])
+    out[k] = a[k] ?? (k === "mean" ? a._mean : undefined) ?? "";
+  return out;
+}
+
+let inflight = false;
+function setBusy(on) {
+  inflight = on;
+  $("#runBtn").disabled = on || !SIM.live;
+  $("#runMcBtn").disabled = on || !SIM.live;
+  $("#busy").hidden = !on;
+}
+function showError(msg) { $("#errmsg").textContent = msg; $("#errbar").hidden = false; }
+$("#errclose").addEventListener("click", () => { $("#errbar").hidden = true; });
+
+// The only network calls in the file; unreachable in static mode.
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    let msg = null;
+    try { msg = (await r.json()).error; } catch (e) { /* non-JSON error body */ }
+    throw new Error(msg || `${r.status} ${r.statusText}`);
+  }
+  return r.json();
+}
+
+function distField(f) {
+  const wrap = el("div", { "data-factor-wrap": f.name });
+  const field = el("div", { class: "field" });
+  field.appendChild(el("label", {}, f.label || f.name));
+  const sel = el("select", { "data-factor": f.name });
+  const defType = f.default && f.default.type;
+  for (const t of Object.keys(DIST_PARAMS)) {
+    const o = el("option", { value: t }, t);
+    if (t === defType) o.selected = true;
+    sel.appendChild(o);
+  }
+  // A default outside the editable catalog (Choice, Empirical…) stays view-only.
+  if (defType && !DIST_PARAMS[defType]) {
+    const note = el("div", { class: "note" }, `${prettyDist(f.default)} (not editable)`);
+    wrap.appendChild(field); field.appendChild(el("span", {}, ""));
+    wrap.appendChild(note);
+    sel.remove();
+    return wrap;
+  }
+  field.appendChild(sel);
+  wrap.appendChild(field);
+  const argsDiv = el("div", { class: "dist-params" });
+  wrap.appendChild(argsDiv);
+  const rebuild = () => {
+    const prev = {};
+    argsDiv.querySelectorAll("input[data-arg]").forEach((i) => { prev[i.dataset.arg] = i.value; });
+    argsDiv.textContent = "";
+    const seed = sel.value === defType ? distArgsOf(f.default) : {};
+    for (const arg of DIST_PARAMS[sel.value]) {
+      const row = el("div", { class: "field" });
+      row.appendChild(el("label", {}, arg));
+      const inp = el("input", { type: "number", step: "any", "data-arg": arg });
+      inp.value = prev[arg] ?? seed[arg] ?? "";
+      row.appendChild(inp);
+      argsDiv.appendChild(row);
+    }
+  };
+  sel.addEventListener("change", rebuild);
+  rebuild();
+  return wrap;
+}
+
+function buildParamPanel() {
+  const panel = $("#params");
+  const show = SIM.live || (SIM.factors && SIM.factors.length);
+  panel.hidden = !show;
+  if (!show) return;
+  const root = $("#factorFields");
+  root.textContent = "";
+  for (const f of SIM.factors || []) {
+    if (f.kind === "distribution") { root.appendChild(distField(f)); continue; }
+    const field = el("div", { class: "field" });
+    field.appendChild(el("label", {}, f.label || f.name));
+    if (f.kind === "fixed" || f.kind === "schedule") {
+      field.appendChild(el("span", { class: "note" },
+        f.kind === "schedule" ? prettyDist(f.default) : String(f.default)));
+    } else if (f.kind === "bool") {
+      const inp = el("input", { type: "checkbox", "data-factor": f.name });
+      inp.checked = !!f.default;
+      field.appendChild(inp);
+    } else if (f.kind === "choice") {
+      const sel = el("select", { "data-factor": f.name });
+      for (const o of f.options) {
+        const opt = el("option", { value: String(o) }, String(o));
+        if (o === f.default) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      field.appendChild(sel);
+    } else if (f.kind === "str") {
+      const inp = el("input", { type: "text", "data-factor": f.name });
+      inp.value = f.default;
+      field.appendChild(inp);
+    } else {
+      const attrs = { type: "number", "data-factor": f.name, step: String(f.step ?? (f.kind === "int" ? 1 : "any")) };
+      if (f.min != null) attrs.min = String(f.min);
+      if (f.max != null) attrs.max = String(f.max);
+      const inp = el("input", attrs);
+      inp.value = f.default;
+      field.appendChild(inp);
+    }
+    root.appendChild(field);
+  }
+  $("#seedInput").value = kpis.run.seed;
+  if (!SIM.live) {
+    $("#staticHint").hidden = false;
+    panel.querySelectorAll("input, select, button").forEach((e) => { e.disabled = true; });
+  }
+}
+
+function readFactors() {
+  const out = {};
+  for (const f of SIM.factors || []) {
+    if (f.kind === "fixed" || f.kind === "schedule") continue;
+    const ctl = document.querySelector(`[data-factor="${f.name}"]`);
+    if (!ctl) continue;
+    if (f.kind === "bool") { out[f.name] = ctl.checked; continue; }
+    if (f.kind === "choice") { out[f.name] = f.options[ctl.selectedIndex]; continue; }
+    if (f.kind === "str") { out[f.name] = ctl.value; continue; }
+    if (f.kind === "distribution") {
+      const wrap = document.querySelector(`[data-factor-wrap="${f.name}"]`);
+      if (!wrap || !wrap.querySelector("select")) continue; // view-only default
+      const args = {};
+      wrap.querySelectorAll("input[data-arg]").forEach((i) => {
+        const v = parseFloat(i.value);
+        if (Number.isNaN(v)) throw new Error(`${f.label || f.name}: fill in "${i.dataset.arg}"`);
+        args[i.dataset.arg] = v;
+      });
+      out[f.name] = { type: ctl.value, args };
+      continue;
+    }
+    const v = f.kind === "int" ? parseInt(ctl.value, 10) : parseFloat(ctl.value);
+    if (Number.isNaN(v)) throw new Error(`${f.label || f.name}: enter a number`);
+    out[f.name] = v;
+  }
+  return out;
+}
+
+async function runOnce() {
+  if (!SIM.live || inflight) return;
+  try {
+    setBusy(true);
+    $("#errbar").hidden = true;
+    const seed = parseInt($("#seedInput").value, 10);
+    const resp = await api("/api/run", { factors: readFactors(), seed });
+    reinit(resp);
+  } catch (e) { showError(e.message); }
+  finally { setBusy(false); }
+}
+async function runMC() {
+  if (!SIM.live || inflight) return;
+  try {
+    setBusy(true);
+    $("#errbar").hidden = true;
+    const n = parseInt($("#mcN").value, 10);
+    const seed = parseInt($("#seedInput").value, 10);
+    const resp = await api("/api/replicate", { factors: readFactors(), n, seed });
+    MC = {
+      n: resp.n, confidence: resp.confidence, kpi_table: resp.kpi_table,
+      kpi_samples: resp.kpi_samples, percentiles: resp.percentiles, source: "live run",
+    };
+    $("#mcTabBtn").hidden = false;
+    mcDirty = true;
+    document.querySelector('[data-tab="mc"]').click();
+  } catch (e) { showError(e.message); }
+  finally { setBusy(false); }
+}
+$("#runBtn").addEventListener("click", runOnce);
+$("#runMcBtn").addEventListener("click", runMC);
+
 // ---------- boot / reinit ----------
 // reinit() swaps in a whole run ({model, trace, kpis}) — used at boot with
 // the embedded SIM and by the live parameter panel after POST /api/run.
@@ -859,4 +1051,8 @@ function reinit(payload) {
 }
 reinit(SIM);
 seedMC();
+buildParamPanel();
+setBusy(false);
 requestAnimationFrame(tick);
+// Headless/E2E hook: http://…/?autorun=1 runs once with default factors.
+if (SIM.live && new URLSearchParams(location.search).has("autorun")) runOnce();

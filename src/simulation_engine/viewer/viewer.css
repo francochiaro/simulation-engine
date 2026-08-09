@@ -106,6 +106,39 @@
   .md pre code { background: none; border: none; padding: 0; }
   .md hr { border: none; border-top: 1px solid var(--grid); margin: 16px 0; }
   .md a { color: var(--s1); }
+  /* Parameter panel (Animation tab) */
+  #animRow { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  #canvasWrap { flex: 1 1 640px; min-width: 0; }
+  #params { flex: 0 0 300px; position: sticky; top: 12px; }
+  #params h3 { font-size: 13.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+  #params hr { border: none; border-top: 1px solid var(--grid); margin: 14px 0; }
+  #params .field { display: flex; align-items: center; gap: 8px; margin: 7px 0; }
+  #params .field label { flex: 1 1 auto; color: var(--ink-2); font-size: 12.5px; }
+  #params input[type=number], #params select {
+    font: inherit; font-size: 12.5px; color: var(--ink-1); background: var(--page);
+    border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px; width: 110px;
+  }
+  #params select { width: 130px; }
+  #params .dist-params { margin: 2px 0 4px 12px; border-left: 2px solid var(--grid); padding-left: 10px; }
+  #params button {
+    font: inherit; font-size: 13px; width: 100%; margin-top: 8px; cursor: pointer;
+    background: var(--surface-1); color: var(--ink-1);
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px;
+  }
+  #params button:hover:not(:disabled) { border-color: var(--axis); }
+  #params button.btn-primary { background: var(--s1); border-color: var(--s1); color: #fff; }
+  #params button:disabled, #params input:disabled, #params select:disabled { opacity: 0.55; cursor: not-allowed; }
+  #params #staticHint { margin-bottom: 10px; }
+  /* Error banner */
+  #errbar[hidden] { display: none; }
+  #errbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-1); border-bottom: 2px solid var(--bad);
+    color: var(--ink-1); padding: 10px 18px; font-size: 13px;
+  }
+  #errbar button { margin-left: auto; font: inherit; background: none; border: none;
+    color: var(--ink-2); cursor: pointer; font-size: 16px; }
   /* Monte Carlo tab */
   .mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 12px; }
   .mc-grid .card { margin-bottom: 0; }

@@ -31,7 +31,23 @@
     <input id="scrub" type="range" min="0" max="1000" value="0">
     <label>slow <input id="speed" type="range" min="0" max="100" value="55"> fast</label>
   </div>
-  <div class="card" id="canvasWrap"><canvas id="anim"></canvas></div>
+  <div id="animRow">
+    <div class="card" id="canvasWrap"><canvas id="anim"></canvas></div>
+    <aside class="card" id="params" hidden>
+      <h3>Parameters</h3>
+      <div id="staticHint" class="note" hidden>Static snapshot — controls are read-only.
+        Serve this model with <code>uv run python -m simulation_engine.serve &lt;model.py&gt;</code> to edit and re-run.</div>
+      <div id="factorFields"></div>
+      <div class="field"><label for="seedInput">seed</label><input id="seedInput" type="number" step="1"></div>
+      <button id="runBtn" class="btn-primary" type="button">▶ Run simulation</button>
+      <hr>
+      <h3>Monte Carlo</h3>
+      <div class="note">N independent replications at these parameters → KPI distributions.</div>
+      <div class="field"><label for="mcN">replications</label><input id="mcN" type="number" min="2" max="1000" step="1" value="30"></div>
+      <button id="runMcBtn" type="button">Run Monte Carlo</button>
+      <div id="busy" class="note" hidden>running…</div>
+    </aside>
+  </div>
 </div>
 
 <div class="panel" id="panel-model">
@@ -42,6 +58,7 @@
 <div class="panel" id="panel-mc"><div id="mc"></div></div>
 <div class="panel" id="panel-report"><div id="report"></div></div>
 <div class="tooltip" id="tooltip"></div>
+<div id="errbar" hidden><span id="errmsg"></span><button id="errclose" type="button">×</button></div>
 
 <script>
 /*__JS__*/
