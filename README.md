@@ -1,5 +1,7 @@
 # simulation-engine
 
+[![CI](https://github.com/francochiaro/simulation-engine/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/francochiaro/simulation-engine/actions/workflows/ci.yml)
+
 Agent-driven discrete-event and Monte Carlo simulation. An AnyLogic-style
 workflow — conceptual model, validated software model, replications with
 confidence intervals, sensitivity scenarios, animated visualization — where
@@ -149,7 +151,7 @@ ln -s "$(pwd)/skill" ~/.claude/skills/simulate
 uv run pytest
 ```
 
-48 tests, including the ones that matter: simulated CIs must cover the exact
+56 tests, including the ones that matter: simulated CIs must cover the exact
 analytic values for M/M/1 and M/M/3; Little's residual stays under 2%; equal
 seeds give byte-identical traces; every validation check catches its seeded
 defect.
