@@ -34,6 +34,7 @@ from simulation_engine import (
 )
 from simulation_engine.experiments import replicate, sweep
 from simulation_engine.factors import describe_factors
+from simulation_engine.report import build_report
 from simulation_engine.viewer.build_viewer import build_viewer
 
 DAY = 16 * 60.0  # two shifts, minutes
@@ -154,6 +155,33 @@ def main() -> None:
         ).read(),
     )
     print(f"\nviewer: {path}")
+
+    report_path = os.path.join(out_dir, "report.md")
+    build_report(
+        question="Do 4 pickers (vs 3) or bigger carts improve order-to-dock time "
+                 "and lost demand over a peaky 16 h day?",
+        title="Warehouse order fulfillment — picker/cart configuration",
+        run_result=showcase,
+        replications=reps,
+        sweep_result=sw,
+        sweep_kpi=kpi,
+        conceptual_model=open(
+            os.path.join(os.path.dirname(__file__), "conceptual-model.md")
+        ).read(),
+        assumptions=[
+            "A1: pick time ~ Lognormal(6, 3) min — expert estimate, no data",
+            "A2: order patience 45 min — policy, not measured",
+            "A3: packer mtbf/mttr ~ Exponential(180)/Triangular(5, 12, 30) — anecdotal",
+        ],
+        simplifications=[
+            "S1: single aggregated pick zone (zone travel folded into pick time)",
+            "S2: forklift path as straight 120 m",
+        ],
+        next_steps=["collect real pick-time data (fit vs the Lognormal assumption)"],
+        kpi_prefixes=("orders_", "order_to_dock", "packers.", "clock_out", "wip"),
+        out_path=report_path,
+    )
+    print(f"report: {report_path}")
 
 
 if __name__ == "__main__":

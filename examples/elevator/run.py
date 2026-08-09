@@ -26,6 +26,7 @@ from simulation_engine import (
 )
 from simulation_engine.experiments import replicate, sweep
 from simulation_engine.factors import describe_factors
+from simulation_engine.report import build_report
 from simulation_engine.viewer.build_viewer import build_viewer
 
 FLOORS = 20
@@ -140,6 +141,31 @@ def main() -> None:
         ).read(),
     )
     print(f"\nviewer: {path}")
+
+    report_path = os.path.join(out_dir, "report.md")
+    build_report(
+        question="Is a third elevator car worth it for the morning up-peak "
+                 "(p95 wait-for-car)?",
+        title="Elevator bank — 2 vs 3 cars",
+        run_result=showcase,
+        replications=reps,
+        sweep_result=sw,
+        sweep_kpi=kpi,
+        conceptual_model=open(
+            os.path.join(os.path.dirname(__file__), "conceptual-model.md")
+        ).read(),
+        assumptions=[
+            "A1: peak arrival rate 0.045 riders/s — coarse badge-in counts",
+            "A2: 8 s load / 8 s unload — small-sample observation",
+        ],
+        simplifications=[
+            "S1: FIFO dispatch, one rider per trip (conservative vs group control)",
+            "S2: no per-car capacity limit",
+        ],
+        kpi_prefixes=("riders_", "wait_", "door_", "cars."),
+        out_path=report_path,
+    )
+    print(f"report: {report_path}")
 
 
 if __name__ == "__main__":

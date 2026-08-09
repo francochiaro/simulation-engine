@@ -19,6 +19,7 @@ from simulation_engine import Exponential, Model, Queue, Service, Sink, Source
 from simulation_engine import theory_check
 from simulation_engine.experiments import replicate
 from simulation_engine.factors import describe_factors
+from simulation_engine.report import build_report
 from simulation_engine.viewer.build_viewer import build_viewer
 
 LAM, MU = 0.8, 1.0
@@ -71,6 +72,22 @@ def main() -> None:
         ).read(),
     )
     print(f"\nviewer: {path}")
+
+    report_path = os.path.join(out_dir, "report.md")
+    build_report(
+        question="Do simulated M/M/1 CIs cover the exact analytic values at ρ = 0.8?",
+        title="M/M/1 queue — validation anchor",
+        run_result=showcase,
+        replications=reps,
+        theory=chk,
+        conceptual_model=open(
+            os.path.join(os.path.dirname(__file__), "conceptual-model.md")
+        ).read(),
+        assumptions=["A1: none — all inputs are definitional for the M/M/1"],
+        simplifications=["S1: none — the model is the reference"],
+        out_path=report_path,
+    )
+    print(f"report: {report_path}")
 
 
 if __name__ == "__main__":
