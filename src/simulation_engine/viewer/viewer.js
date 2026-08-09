@@ -111,12 +111,13 @@ document.querySelectorAll("nav.tabs button").forEach((b) =>
     document.querySelectorAll("nav.tabs button").forEach((x) => x.classList.toggle("active", x === b));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === "panel-" + b.dataset.tab));
     if (b.dataset.tab === "charts") drawCharts();
+    if (b.dataset.tab === "mc") drawMC();
   }));
 $("#themeBtn").addEventListener("click", () => {
   const cur = document.documentElement.dataset.theme ||
     (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark";
-  drawCharts(); draw();
+  drawCharts(); mcDirty = true; drawMC(true); draw();
 });
 
 // ---------- animation ----------
@@ -347,6 +348,174 @@ function drawCharts() {
     { name: "arrivals", data: cum.arrivals, color: S(0) },
     { name: "departures", data: cum.departures, color: S(2) },
   ]);
+}
+
+// ---------- monte carlo ----------
+// MC holds the current replication result: either the embedded experiment
+// (static viewers) or the response of POST /api/replicate (live mode).
+// Shape: {n, confidence, kpi_table, kpi_samples, percentiles, source}
+let MC = null, mcDirty = true;
+
+function seedMC() {
+  const ex = SIM.experiment;
+  if (ex && ex.kpi_samples) {
+    MC = {
+      n: ex.n_replications, confidence: ex.confidence, kpi_table: ex.kpi_table,
+      kpi_samples: ex.kpi_samples, percentiles: ex.percentiles, source: "embedded",
+    };
+  }
+  $("#mcTabBtn").hidden = !(SIM.live || MC);
+  mcDirty = true;
+}
+
+function quantile(sorted, q) {
+  if (!sorted.length) return NaN;
+  const pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+// Histogram of per-replication KPI values. Single series (one hue); the
+// mean±CI band and P10/P50/P90 reference lines are overlays, not series.
+function histogram(container, title, samples, opts = {}) {
+  const vals = samples.filter((v) => v != null && !Number.isNaN(v)).sort((a, b) => a - b);
+  const card = el("div", { class: "card chart-card" });
+  card.appendChild(el("h3", {}, title));
+  container.appendChild(card);
+  if (!vals.length) { card.appendChild(el("div", { class: "note" }, "no data")); return; }
+  const lo = vals[0], hi = vals[vals.length - 1];
+  if (lo === hi) {
+    card.appendChild(el("div", { class: "note" }, `constant across replications: ${fmt(lo, 3)}`));
+    return;
+  }
+  // Freedman–Diaconis, Sturges fallback, clamped to [5, 40] bins.
+  const iqr = quantile(vals, 0.75) - quantile(vals, 0.25);
+  const width = iqr > 0 ? 2 * iqr / Math.cbrt(vals.length) : (hi - lo) / (Math.ceil(Math.log2(vals.length)) + 1);
+  const nBins = Math.max(5, Math.min(40, Math.round((hi - lo) / width) || 5));
+  const counts = new Array(nBins).fill(0);
+  for (const v of vals) counts[Math.min(nBins - 1, Math.floor(((v - lo) / (hi - lo)) * nBins))]++;
+  const maxCount = Math.max(...counts);
+
+  const W = Math.max(280, Math.min((card.clientWidth || 460) - 34, 1060)), H = 210,
+    m = { l: 40, r: 14, t: 20, b: 22 };
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}` });
+  const X = (v) => m.l + ((v - lo) / (hi - lo)) * (W - m.l - m.r);
+  const Y = (c) => H - m.b - (c / (maxCount * 1.08)) * (H - m.t - m.b);
+  for (const c of niceTicks(0, maxCount, 3)) {
+    svg.appendChild(svgEl("line", { x1: m.l, x2: W - m.r, y1: Y(c), y2: Y(c), stroke: "var(--grid)", "stroke-width": 1 }));
+    svg.appendChild(svgEl("text", { x: m.l - 6, y: Y(c) + 4, "text-anchor": "end" }, fmt(c, 0)));
+  }
+  for (const v of niceTicks(lo, hi, 5))
+    svg.appendChild(svgEl("text", { x: X(v), y: H - 6, "text-anchor": "middle" }, fmt(v, 2)));
+  svg.appendChild(svgEl("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1 }));
+
+  // CI band + mean line beneath the bars' tops but above grid.
+  const s = opts.summary;
+  if (s && s.ci_low != null && !Number.isNaN(s.ci_low)) {
+    svg.appendChild(svgEl("rect", {
+      x: X(Math.max(lo, s.ci_low)), y: m.t,
+      width: Math.max(1, X(Math.min(hi, s.ci_high)) - X(Math.max(lo, s.ci_low))),
+      height: H - m.t - m.b, fill: cssVar("--s2"), "fill-opacity": 0.1,
+    }));
+  }
+  // Bars: ≤24px thick, 2px surface gap, rounded data-end / square baseline.
+  const slotW = (W - m.l - m.r) / nBins;
+  const barW = Math.min(24, Math.max(1.5, slotW - 2));
+  counts.forEach((c, i) => {
+    if (!c) return;
+    const x = m.l + i * slotW + (slotW - barW) / 2, y = Y(c), h = H - m.b - y;
+    const r = Math.min(4, barW / 2, h);
+    const bar = svgEl("path", {
+      d: `M ${x} ${y + h} L ${x} ${y + r} Q ${x} ${y} ${x + r} ${y} L ${x + barW - r} ${y} Q ${x + barW} ${y} ${x + barW} ${y + r} L ${x + barW} ${y + h} Z`,
+      fill: cssVar("--s1"), "fill-opacity": 0.78,
+    });
+    const binLo = lo + (i / nBins) * (hi - lo), binHi = lo + ((i + 1) / nBins) * (hi - lo);
+    bar.addEventListener("pointerenter", (evt) => {
+      bar.setAttribute("fill-opacity", "1");
+      tooltip.style.display = "block";
+      tooltip.textContent = "";
+      tooltip.appendChild(el("div", { class: "tt-t" }, `[${fmt(binLo, 2)}, ${fmt(binHi, 2)})`));
+      const row = el("div", { class: "row" });
+      row.appendChild(el("span", {}, "replications"));
+      row.appendChild(el("b", {}, `${c} (${fmt((c / vals.length) * 100, 0)}%)`));
+      tooltip.appendChild(row);
+      tooltip.style.left = Math.min(evt.clientX + 14, innerWidth - 170) + "px";
+      tooltip.style.top = (evt.clientY + 12) + "px";
+    });
+    bar.addEventListener("pointerleave", () => { bar.setAttribute("fill-opacity", "0.78"); tooltip.style.display = "none"; });
+    svg.appendChild(bar);
+  });
+  if (s && s.mean != null && !Number.isNaN(s.mean) && s.mean >= lo && s.mean <= hi) {
+    svg.appendChild(svgEl("line", { x1: X(s.mean), x2: X(s.mean), y1: m.t, y2: H - m.b, stroke: cssVar("--s2"), "stroke-width": 2 }));
+    svg.appendChild(svgEl("text", { x: X(s.mean), y: m.t - 7, "text-anchor": "middle", fill: cssVar("--ink-2") }, "mean"));
+  }
+  const p = opts.pcts || {};
+  for (const key of ["p10", "p50", "p90"]) {
+    const v = p[key];
+    if (v == null || Number.isNaN(v) || v < lo || v > hi) continue;
+    svg.appendChild(svgEl("line", {
+      x1: X(v), x2: X(v), y1: m.t + 8, y2: H - m.b,
+      stroke: "var(--axis)", "stroke-width": 1, "stroke-dasharray": "4 3",
+    }));
+    svg.appendChild(svgEl("text", { x: X(v), y: m.t + 4, "text-anchor": "middle" }, key.toUpperCase()));
+  }
+  card.appendChild(svg);
+}
+
+// Which KPIs deserve a histogram up front: declared outputs (undotted),
+// system WIP, and the decision-relevant dotted stats. The rest collapse.
+const isPrimaryKpi = (k) =>
+  !k.includes(".") || k === "wip.mean" ||
+  /\.(time_in_system|wait|elapsed)\.mean$/.test(k) || /\.utilization$/.test(k);
+
+function drawMC(force) {
+  if (!$("#panel-mc").classList.contains("active")) { mcDirty = true; return; }
+  const root = $("#mc");
+  if (!force && !mcDirty && root.childElementCount) return;
+  root.textContent = "";
+  mcDirty = false;
+  if (!MC) {
+    const c = el("div", { class: "card" });
+    c.textContent = SIM.live
+      ? "Set parameters on the Animation tab and run a Monte Carlo (N replications) to see output distributions here."
+      : "No replication data embedded in this run.";
+    root.appendChild(c);
+    return;
+  }
+  root.appendChild(el("div", { class: "note" },
+    `${MC.n} independent replications (${MC.source}). Each histogram is a KPI's distribution across replications — ` +
+    `the mean ± CI quantifies the estimate, P10/P50/P90 describe the spread (THEORY.md §5, §8).`));
+
+  const keys = Object.keys(MC.kpi_samples).sort();
+  const primary = keys.filter(isPrimaryKpi), rest = keys.filter((k) => !isPrimaryKpi(k));
+  const summaryRow = (k) => {
+    const s = (MC.kpi_table || {})[k], p = (MC.percentiles || {})[k] || {};
+    return [k, ciText(s), fmt(p.p10, 3), fmt(p.p50, 3), fmt(p.p90, 3)];
+  };
+  root.appendChild(el("h2", { class: "sec" }, "KPI summary"));
+  const tcard = el("div", { class: "card" });
+  tcard.appendChild(tableOf(["kpi", `mean and ${fmt((MC.confidence ?? 0.95) * 100, 0)}% CI`, "p10", "p50", "p90"],
+    [...primary, ...rest].map(summaryRow)));
+  root.appendChild(tcard);
+
+  root.appendChild(el("h2", { class: "sec" }, "Output distributions"));
+  const grid = el("div", { class: "mc-grid" });
+  root.appendChild(grid);
+  for (const k of primary)
+    histogram(grid, k, MC.kpi_samples[k], { summary: (MC.kpi_table || {})[k], pcts: (MC.percentiles || {})[k] });
+  if (rest.length) {
+    const det = el("details");
+    det.appendChild(el("summary", {}, `All block & pool statistics (${rest.length})`));
+    const dgrid = el("div", { class: "mc-grid" });
+    det.appendChild(dgrid);
+    let rendered = false;
+    det.addEventListener("toggle", () => {
+      if (!det.open || rendered) return;
+      rendered = true;
+      for (const k of rest)
+        histogram(dgrid, k, MC.kpi_samples[k], { summary: (MC.kpi_table || {})[k], pcts: (MC.percentiles || {})[k] });
+    });
+    root.appendChild(det);
+  }
 }
 
 // ---------- report ----------
@@ -689,4 +858,5 @@ function reinit(payload) {
   if ($("#panel-charts").classList.contains("active")) drawCharts();
 }
 reinit(SIM);
+seedMC();
 requestAnimationFrame(tick);

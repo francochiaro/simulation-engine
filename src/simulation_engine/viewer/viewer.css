@@ -106,3 +106,8 @@
   .md pre code { background: none; border: none; padding: 0; }
   .md hr { border: none; border-top: 1px solid var(--grid); margin: 16px 0; }
   .md a { color: var(--s1); }
+  /* Monte Carlo tab */
+  .mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 12px; }
+  .mc-grid .card { margin-bottom: 0; }
+  #panel-mc details { margin-top: 16px; }
+  #panel-mc summary { cursor: pointer; color: var(--ink-2); font-weight: 550; margin-bottom: 10px; }
